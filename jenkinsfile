@@ -15,9 +15,9 @@ pipeline {
         stage('Checkout Code') {
             steps {
              sh '''
-          rm -rf gcp-tf-jenkinspractice
-          git clone https://github.com/TCRDINSEH/gcp-tf-jenkinspractice.git
-          cd gcp-tf-jenkinspractice
+          rm -rf front-end
+          git clone https://github.com/TCRDINSEH/front-end.git
+          cd front-end
           pwd
           chmod 777 *
           ls -la
