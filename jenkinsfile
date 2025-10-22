@@ -10,7 +10,7 @@ pipeline {
         REPO_NAME = 'frontend-repo'
         ARTIFACT_REGISTRY = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
         DEPLOYMENT_FILE = 'k8s-deployment.yaml'
-        GCP_CREDENTIALS = 'artifact-registry-credentials' // Jenkins Secret File credential
+        GCP_CREDENTIALS = 'artifact-registry-credentials'
     }
 
     stages {
@@ -22,16 +22,30 @@ pipeline {
                     git clone https://github.com/TCRDINSEH/front-end.git
                     cd front-end
                     pwd
-                    chmod 777 *
                     ls -la
                 '''
+            }
+        }
+
+        stage('Setup Go Environment') {
+            steps {
+                dir('front-end') {
+                    sh '''
+                        echo "Setting up Go environment..."
+                        go version || sudo apt-get update && sudo apt-get install -y golang-go
+                        go mod tidy
+                    '''
+                }
             }
         }
 
         stage('Build') {
             steps {
                 dir('front-end') {
-                    sh 'mvn compile'
+                    sh '''
+                        echo "Building Go binary..."
+                        go build -v -o app
+                    '''
                 }
             }
         }
@@ -39,7 +53,10 @@ pipeline {
         stage('Test') {
             steps {
                 dir('front-end') {
-                    sh 'mvn test'
+                    sh '''
+                        echo "Running Go tests..."
+                        go test ./... -v
+                    '''
                 }
             }
         }
@@ -52,11 +69,12 @@ pipeline {
             steps {
                 dir('front-end') {
                     sh '''
-                        mvn sonar:sonar \
-                            -Dsonar.projectKey=TCRDINSEH_front-end \
-                            -Dsonar.organization=TCRDIN \
-                            -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.login=${SONAR_AUTH_TOKEN}
+                        echo "Running SonarQube analysis for Go..."
+                        sonar-scanner \
+                          -Dsonar.projectKey=TCRDINSEH_front-end \
+                          -Dsonar.organization=TCRDIN \
+                          -Dsonar.host.url=${SONAR_HOST_URL} \
+                          -Dsonar.login=${SONAR_AUTH_TOKEN}
                     '''
                 }
             }
@@ -74,10 +92,11 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: "${GCP_CREDENTIALS}", variable: 'GCLOUD_KEY')]) {
                     sh '''
-                        echo "Activating GCP service account..."
+                        echo "Authenticating with GCP..."
                         gcloud auth activate-service-account --key-file=$GCLOUD_KEY
                         gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
-                        echo "Tagging and pushing Docker image..."
+
+                        echo "Pushing Docker image..."
                         docker tag ${IMAGE_NAME}:latest ${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest
                         docker push ${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest
                     '''
@@ -89,26 +108,4 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: "${GCP_CREDENTIALS}", variable: 'GCLOUD_KEY')]) {
                     sh '''
-                        echo "Authenticating with GKE..."
-                        gcloud auth activate-service-account --key-file=$GCLOUD_KEY
-                        gcloud config set project ${PROJECT_ID}
-                        gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}
-                        echo "Updating Kubernetes deployment..."
-                        kubectl set image deployment/frontend-deployment frontend=${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest --record || \
-                        kubectl apply -f ${DEPLOYMENT_FILE}
-                    '''
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            echo '✅ Deployment succeeded!'
-        }
-        failure {
-            echo '❌ Deployment failed!'
-        }
-    }
-}
-
+                        echo "Deploying to GKE..."
