@@ -1,3 +1,100 @@
+// pipeline {
+//     agent any
+
+//     environment {
+//         PROJECT_ID = 'fundamental-run-464208-v1'
+//         CLUSTER_NAME = 'tf-gke-cluster'
+//         CLUSTER_ZONE = 'us-central1-a'
+//         IMAGE_NAME = 'frontend'
+//         REGION = 'us-central1'
+//         REPO_NAME = 'frontend-repo'
+//         ARTIFACT_REGISTRY = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
+//         DEPLOYMENT_FILE = 'k8s-deployment.yaml'
+//         GCP_CREDENTIALS = 'artifact-registry-credentials' // Jenkins Secret File credential
+//     }
+
+//     stages {
+
+//         stage('Checkout Code') {
+//             steps {
+//                 sh '''
+//                     rm -rf front-end
+//                     git clone https://github.com/TCRDINSEH/front-end.git
+//                     cd front-end
+//                     pwd
+//                     chmod 777 *
+//                     ls -la
+//                 '''
+//             }
+//         }
+//             stage ('Build'){
+//                 steps {
+//                  sh 'mvn compile'    
+//              }
+//         }
+//         stage ('Test'){
+//             steps {
+//             sh 'mvn test'    
+//         }
+//     }
+//      stage ('SonarQube Analysis'){
+//     environment{
+//     SONAR_HOST_URL = 'http://sonarcloud.io/'
+//     SONAR_AUTH_TOKEN = credentials('sonarqube')
+//     }
+//     steps {
+//     sh 'mvn sonar:sonar -Dsonar.projectKey=TCRDINSEH_front-end -Dsonar.organization=TCRDIN
+//     }
+//         stage('Build Docker Image') {
+//             steps {
+//                 dir('front-end') {
+//                     sh 'docker build -t ${IMAGE_NAME}:latest .'
+//                 }
+//             }
+//         }
+
+//         stage('Authenticate & Push to Artifact Registry') {
+//             steps {
+//                 withCredentials([file(credentialsId: "${GCP_CREDENTIALS}", variable: 'GCLOUD_KEY')]) {
+//                     sh '''
+//                         echo "Activating GCP service account..."
+//                         gcloud auth activate-service-account --key-file=$GCLOUD_KEY
+//                         gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
+
+//                         echo "Tagging and pushing Docker image..."
+//                         docker tag ${IMAGE_NAME}:latest ${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest
+//                         docker push ${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest
+//                     '''
+//                 }
+//             }
+//         }
+
+//         stage('Deploy to GKE') {
+//             steps {
+//                 withCredentials([file(credentialsId: "${GCP_CREDENTIALS}", variable: 'GCLOUD_KEY')]) {
+//                     sh '''
+//                         echo "Authenticating with GKE..."
+//                         gcloud auth activate-service-account --key-file=$GCLOUD_KEY
+//                         gcloud config set project ${PROJECT_ID}
+//                         gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}
+
+//                         echo "Updating Kubernetes deployment..."
+//                         kubectl set image deployment/frontend-deployment frontend=${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest --record || kubectl apply -f ${DEPLOYMENT_FILE}
+//                     '''
+//                 }
+//             }
+//         }
+//     }
+
+//     post {
+//         success {
+//             echo '✅ Deployment succeeded!'
+//         }
+//         failure {
+//             echo '❌ Deployment failed!'
+//         }
+//     }
+// }
 pipeline {
     agent any
 
@@ -27,24 +124,41 @@ pipeline {
                 '''
             }
         }
-            stage ('Build'){
-                steps {
-                 sh 'mvn compile'    
-             }
-        }
-        stage ('Test'){
+
+        stage('Build') {
             steps {
-            sh 'mvn test'    
+                dir('front-end') {
+                    sh 'mvn compile'
+                }
+            }
         }
-    }
-     stage ('SonarQube Analysis'){
-    environment{
-    SONAR_HOST_URL = 'http://sonarcloud.io/'
-    SONAR_AUTH_TOKEN = credentials('sonarqube')
-    }
-    steps {
-    sh 'mvn sonar:sonar -Dsonar.projectKey=TCRDINSEH_front-end -Dsonar.organization=TCRDIN
-    }
+
+        stage('Test') {
+            steps {
+                dir('front-end') {
+                    sh 'mvn test'
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            environment {
+                SONAR_HOST_URL = 'https://sonarcloud.io'
+                SONAR_AUTH_TOKEN = credentials('sonarqube')
+            }
+            steps {
+                dir('front-end') {
+                    sh '''
+                        mvn sonar:sonar \
+                        -Dsonar.projectKey=TCRDINSEH_front-end \
+                        -Dsonar.organization=TCRDIN \
+                        -Dsonar.host.url=${SONAR_HOST_URL} \
+                        -Dsonar.login=${SONAR_AUTH_TOKEN}
+                    '''
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 dir('front-end') {
@@ -79,7 +193,8 @@ pipeline {
                         gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${CLUSTER_ZONE} --project ${PROJECT_ID}
 
                         echo "Updating Kubernetes deployment..."
-                        kubectl set image deployment/frontend-deployment frontend=${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest --record || kubectl apply -f ${DEPLOYMENT_FILE}
+                        kubectl set image deployment/frontend-deployment frontend=${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest --record || \
+                        kubectl apply -f ${DEPLOYMENT_FILE}
                     '''
                 }
             }
