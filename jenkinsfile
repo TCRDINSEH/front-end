@@ -150,10 +150,10 @@ pipeline {
                 dir('front-end') {
                     sh '''
                         mvn sonar:sonar \
-                        -Dsonar.projectKey=TCRDINSEH_front-end \
-                        -Dsonar.organization=TCRDIN \
-                        -Dsonar.host.url=${SONAR_HOST_URL} \
-                        -Dsonar.login=${SONAR_AUTH_TOKEN}
+                            -Dsonar.projectKey=TCRDINSEH_front-end \
+                            -Dsonar.organization=TCRDIN \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=${SONAR_AUTH_TOKEN}
                     '''
                 }
             }
@@ -210,3 +210,4 @@ pipeline {
         }
     }
 }
+
