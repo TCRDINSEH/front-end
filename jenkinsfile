@@ -27,7 +27,24 @@ pipeline {
                 '''
             }
         }
-
+            stage ('Build'){
+                steps {
+                 sh 'mvn compile'    
+             }
+        }
+        stage ('Test'){
+            steps {
+            sh 'mvn test'    
+        }
+    }
+     stage ('SonarQube Analysis'){
+    environment{
+    SONAR_HOST_URL = 'http://sonarcloud.io/'
+    SONAR_AUTH_TOKEN = credentials('sonarqube')
+    }
+    steps {
+    sh 'mvn sonar:sonar -Dsonar.projectKey=TCRDINSEH_front-end -Dsonar.organization=TCRDIN
+    }
         stage('Build Docker Image') {
             steps {
                 dir('front-end') {
